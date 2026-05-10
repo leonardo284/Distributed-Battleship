@@ -1,5 +1,10 @@
 package distributed.battleship.common.model.message;
 
+import distributed.battleship.common.model.client.Client;
+import distributed.battleship.common.model.room.Room;
+import distributed.battleship.common.model.room.grid.Position;
+import distributed.battleship.common.model.server.BackupServer;
+
 import java.io.Serializable;
 import java.util.List;
 import java.util.UUID;
@@ -134,5 +139,86 @@ public final class MessageConstants {
 
     public record CSBackupExit(UUID senderNodeId, String backupIp, int backupPort) implements MessageTuple {
         @Override public MessageType getType() { return MessageType.CS_BACKUP_EXIT; }
+    }
+
+    // ---------------------------------------------------------------------
+    // Primary-backup server messages
+    // ---------------------------------------------------------------------
+
+    public record SSHelloFromBackup(UUID senderNodeId, String backupIp, int backupPort) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.SS_HELLO_FROM_BACKUP; }
+    }
+
+    /**
+     * Sent by the primary to the backup in response to {@link SSHelloFromBackup}.
+     * Carries the connection order assigned to this backup (1 = first connected).
+     */
+    public record SSResponseHello(UUID senderNodeId, int order) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.SS_RESPONSE_HELLO; }
+    }
+
+    public record SSSendStateToBackup(UUID senderNodeId, PrimaryStateSnapshot state) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.SS_SEND_STATE_TO_BACKUP; }
+    }
+
+    public record SSAck(UUID senderNodeId) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.SS_ACK; }
+    }
+
+    public record SSBackupExit(UUID senderNodeId, String backupIp, int backupPort) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.SS_BACKUP_EXIT; }
+    }
+
+    // ---------------------------------------------------------------------
+    // State snapshot (embedded in SSSendStateToBackup.stateDeltaJson)
+    // ---------------------------------------------------------------------
+
+    /** Plain data carrier serialized as JSON inside {@link SSSendStateToBackup}. */
+    public static final class PrimaryStateSnapshot {
+        public final List<Room> rooms;
+        public final List<Client> connectedClients;
+        public final List<BackupServer> connectedBackups;
+
+        public PrimaryStateSnapshot(List<Room> rooms, List<Client> connectedClients, List<BackupServer> connectedBackups) {
+            this.rooms = rooms;
+            this.connectedClients = connectedClients;
+            this.connectedBackups = connectedBackups;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Peer-to-peer messages
+    // ---------------------------------------------------------------------
+
+    public record PPConnect(UUID senderNodeId, String playerName, String ip, int port, UUID startingPlayerId) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_CONNECT; }
+    }
+
+    public record PPReady(UUID senderNodeId, String roomId, String playerName) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_READY; }
+    }
+
+    public record PPStart(UUID senderNodeId, String roomId, String playerName, List<Position> shipPositions) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_START; }
+    }
+
+    public record PPShot(UUID senderNodeId, int x, int y) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_SHOT; }
+    }
+
+    public record PPHitted(UUID senderNodeId, int x, int y) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_HITTED; }
+    }
+
+    public record PPMissed(UUID senderNodeId, int x, int y) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_MISSED; }
+    }
+
+    public record PPWin(UUID senderNodeId) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_WIN; }
+    }
+
+    public record PPExit(UUID senderNodeId, String roomId, String playerName) implements MessageTuple {
+        @Override public MessageType getType() { return MessageType.PP_EXIT; }
     }
 }
