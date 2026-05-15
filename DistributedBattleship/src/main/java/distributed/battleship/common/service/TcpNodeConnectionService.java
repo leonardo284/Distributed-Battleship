@@ -96,4 +96,122 @@ public abstract class TcpNodeConnectionService {
         }
     }
 
+    protected void attachAcceptedSocket(Socket acceptedSocket) throws IOException {
+        synchronized (connectionStateLock) {
+            this.socket = acceptedSocket;
+            if (useSoTimeout) {
+                // Apply the same timeout policy to accepted sockets when the caller
+                // needs periodic wake-ups from blocking reads.
+                this.socket.setSoTimeout(1000);
+            }
+            this.reader = new BufferedReader(new InputStreamReader(acceptedSocket.getInputStream()));
+            this.writer = new PrintWriter(acceptedSocket.getOutputStream(), true);
+            this.connectedNode = new Node(acceptedSocket.getInetAddress().getHostAddress());
+            this.connectedPort = acceptedSocket.getPort();
+        }
+    }
+
+    /**
+     * Sends one protocol message over the active TCP connection.
+     *
+     * @param msg protocol message to send
+     * @throws IOException if not connected or write fails
+     */
+    public void sendMessage(MessageConstants.MessageTuple msg) throws IOException {
+        PrintWriter currentWriter;
+        Node targetNode;
+        int targetPort;
+        synchronized (connectionStateLock) {
+            if (!isConnectedToNode() || writer == null || connectedNode == null) {
+                throw new IOException("Node is not connected");
+            }
+            currentWriter = writer;
+            targetNode = connectedNode;
+            targetPort = connectedPort;
+        }
+
+        synchronized (writeLock) {
+            AppLogger.debug("[" + getLogTag() + "] Sending message to node " + targetNode.getIp() + ":" + targetPort + " type=" + msg.getType());
+            currentWriter.println(ProtocolMessageJsonHelper.serialize(msg));
+            if (currentWriter.checkError()) {
+                throw new IOException("Socket write failed");
+            }
+        }
+    }
+
+    /**
+     * Waits for one protocol message from the active TCP connection.
+     *
+     * @return received protocol message
+     * @throws IOException if not connected or read fails
+     */
+    public MessageConstants.MessageTuple waitForMessage() throws IOException {
+        BufferedReader currentReader;
+        Node sourceNode;
+        int sourcePort;
+        synchronized (connectionStateLock) {
+            if (!isConnectedToNode() || reader == null || connectedNode == null) {
+                throw new IOException("Node is not connected");
+            }
+            currentReader = reader;
+            sourceNode = connectedNode;
+            sourcePort = connectedPort;
+        }
+
+        String rawMessage = currentReader.readLine();
+        if (rawMessage == null) {
+            throw new IOException("Remote node closed the connection");
+        }
+
+        MessageConstants.MessageTuple message = ProtocolMessageJsonHelper.deserialize(rawMessage);
+        AppLogger.debug("[" + getLogTag() + "] Received message from node " + sourceNode.getIp() + ":" + sourcePort + " type=" + message.getType());
+        return message;
+    }
+
+    /**
+     * Closes the active TCP connection and clears node state.
+     */
+    public void disconnectFromNode() {
+        BufferedReader currentReader;
+        PrintWriter currentWriter;
+        Socket currentSocket;
+        Node previousConnectedNode;
+        int previousConnectedPort;
+
+        synchronized (connectionStateLock) {
+            currentReader = reader;
+            currentWriter = writer;
+            currentSocket = socket;
+            previousConnectedNode = connectedNode;
+            previousConnectedPort = connectedPort;
+            reader = null;
+            writer = null;
+            socket = null;
+            connectedNode = null;
+            connectedPort = 0;
+        }
+
+        if (previousConnectedNode != null) {
+            AppLogger.debug("[" + getLogTag() + "] Disconnecting from node " + previousConnectedNode.getIp() + ":" + previousConnectedPort);
+        }
+        try {
+            if (currentReader != null) {
+                currentReader.close();
+            }
+        } catch (IOException ignored) {
+            // Best-effort shutdown.
+        }
+
+        if (currentWriter != null) {
+            currentWriter.close();
+        }
+
+        try {
+            if (currentSocket != null && !currentSocket.isClosed()) {
+                currentSocket.close();
+            }
+        } catch (IOException ignored) {
+            // Best-effort shutdown.
+        }
+    }
 }
