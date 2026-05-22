@@ -1,4 +1,7 @@
-package distributed.battleship.service;
+package distributed.battleship.common.service;
+
+import distributed.battleship.common.model.message.MessageConstants;
+import distributed.battleship.common.model.node.Node;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -213,5 +216,92 @@ public abstract class TcpNodeConnectionService {
         } catch (IOException ignored) {
             // Best-effort shutdown.
         }
+    }
+
+    /**
+     * @return true when a live TCP connection is active
+     */
+    public boolean isConnectedToNode() {
+        synchronized (connectionStateLock) {
+            return socket != null && !socket.isClosed() && socket.isConnected();
+        }
+    }
+
+    /**
+     * @return currently connected node, or null when disconnected
+     */
+    public Node getConnectedNode() {
+        synchronized (connectionStateLock) {
+            return connectedNode;
+        }
+    }
+
+    /**
+     * Waits asynchronously for a message with timeout on a dedicated thread.
+     * Handles timeout, interruption, and execution errors gracefully.
+     *
+     * @param timeoutSeconds maximum wait duration in seconds
+     * @param threadName name for the internal wait thread
+     * @param onMessage callback to invoke when a message is received
+     * @param onTimeout callback to invoke on timeout
+     */
+    public void waitForMessageWithTimeout(
+            int timeoutSeconds,
+            String threadName,
+            java.util.function.Consumer<MessageConstants.MessageTuple> onMessage,
+            java.util.function.BiConsumer<Integer, String> onTimeout) {
+
+        waitForMessageWithTimeout(
+                timeoutSeconds,
+                threadName,
+                onMessage,
+                onTimeout,
+                throwable -> {
+                    Throwable cause = throwable != null ? throwable : new IllegalStateException("Unknown wait error");
+                    AppLogger.debug("[" + getLogTag() + "] Error while waiting for message: " + cause.getMessage());
+                });
+    }
+
+    /**
+     * Waits asynchronously for a message with timeout on a dedicated thread.
+     * Handles timeout, interruption, and execution errors with explicit callbacks.
+     *
+     * @param timeoutSeconds maximum wait duration in seconds
+     * @param threadName name for the internal wait thread
+     * @param onMessage callback to invoke when a message is received
+     * @param onTimeout callback to invoke on timeout
+     * @param onError callback to invoke when wait fails before timeout
+     */
+    public void waitForMessageWithTimeout(
+            int timeoutSeconds,
+            String threadName,
+            java.util.function.Consumer<MessageConstants.MessageTuple> onMessage,
+            java.util.function.BiConsumer<Integer, String> onTimeout,
+            java.util.function.Consumer<Throwable> onError) {
+
+        Thread waitThread = new Thread(() -> {
+            java.util.concurrent.FutureTask<MessageConstants.MessageTuple> waitTask =
+                    new java.util.concurrent.FutureTask<>(this::waitForMessage);
+
+            Thread ioThread = new Thread(waitTask, threadName + "-io");
+            ioThread.setDaemon(true);
+            ioThread.start();
+
+            try {
+                MessageConstants.MessageTuple message = waitTask.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+                onMessage.accept(message);
+            } catch (java.util.concurrent.TimeoutException ex) {
+                onTimeout.accept(timeoutSeconds, threadName);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                AppLogger.debug("[" + getLogTag() + "] Interrupted while waiting for message on " + threadName);
+            } catch (java.util.concurrent.ExecutionException ex) {
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                onError.accept(cause);
+            }
+        }, threadName);
+
+        waitThread.setDaemon(true);
+        waitThread.start();
     }
 }
