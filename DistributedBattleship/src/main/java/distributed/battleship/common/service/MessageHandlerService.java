@@ -1,6 +1,6 @@
 package distributed.battleship.common.service;
 
-import org.example.common.model.message.MessageConstants;
+import distributed.battleship.common.model.message.MessageConstants;
 
 /**
  * Common contract for protocol message handler services.
