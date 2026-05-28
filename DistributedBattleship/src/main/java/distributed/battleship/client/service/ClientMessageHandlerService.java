@@ -302,5 +302,225 @@ public class ClientMessageHandlerService implements MessageHandlerService {
         clientController.log("PP_READY received from " + peerReady.playerName() + ". Starting placement sequence.");
         clientController.startPlacementHandshakeSequence();
     }
+
+    private void handlePeerStartMessage(MessageConstants.PPStart peerStart) {
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room != null) {
+            if (room.getOpponentGrid() == null) {
+                room.setOpponentGrid(new Grid());
+            }
+            room.getOpponentGrid().setPlacementShips(peerStart.shipPositions());
+            if (clientController.getGameView() != null) {
+                clientController.getGameView().refreshView();
+            }
+        }
+
+        clientController.setOpponentStartReceived(true);
+        clientController.log("PP_START received from " + peerStart.playerName() + ".");
+        if (clientController.isLocalPlacementDone()) {
+            clientController.hideGameLoadingIndicator();
+            clientController.log("Both players completed placement (local + remote PP_START).");
+            clientController.startBattleTurnPhase();
+        }
+    }
+
+    private void handlePeerShotMessage(MessageConstants.PPShot peerShot) {
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room == null || room.getCurrentGrid() == null) {
+            clientController.log("PP_SHOT received without an active current grid.");
+            return;
+        }
+
+        Position shotPosition = new Position(peerShot.x(), peerShot.y());
+        boolean hit = room.fireShot(shotPosition);
+        clientController.log("Opponent fired at (" + peerShot.x() + "," + peerShot.y() + ") - " + (hit ? "HIT" : "MISS"));
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().refreshView();
+        }
+
+        clientController.startLocalTurn();
+    }
+
+    private void handlePeerHittedMessage(MessageConstants.PPHitted peerHitted) {
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room == null || room.getCurrentGrid() == null) {
+            clientController.log("PP_HITTED received without an active current grid.");
+            return;
+        }
+
+        Position hitPosition = new Position(peerHitted.x(), peerHitted.y());
+        room.fireShot(hitPosition);
+        clientController.log("[RECV] PP_HITTED from opponent – cell (" + peerHitted.x() + "," + peerHitted.y() + ") – waiting for next shot.");
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().refreshView();
+        }
+        // Opponent continues their turn – wait for the next shot.
+        waitForPeerMessageWithTimeout(BATTLE_TURN_TIMEOUT_SECONDS, "pp-battle-wait", "PP_HITTED or PP_MISSED", this::handleMessage);
+    }
+
+    private void handlePeerMissedMessage(MessageConstants.PPMissed peerMissed) {
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room == null || room.getCurrentGrid() == null) {
+            clientController.log("PP_MISSED received without an active current grid.");
+            return;
+        }
+
+        Position missPosition = new Position(peerMissed.x(), peerMissed.y());
+        room.fireShot(missPosition);
+        clientController.log("[RECV] PP_MISSED from opponent – cell (" + peerMissed.x() + "," + peerMissed.y() + ") – our turn.");
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().refreshView();
+        }
+
+        clientController.startLocalTurn();
+    }
+
+    private void handlePeerWinMessage(MessageConstants.PPWin peerWin) {
+        clientController.log("[RECV] PP_WIN from " + peerWin.senderNodeId() + " - match ended.");
+        clientController.markRoomClosedByOpponent();
+        peerConnectionService.disconnectFromPeer();
+        String opponentName = "The opponent";
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room != null && room.getOpponent() != null && room.getOpponent().getName() != null && !room.getOpponent().getName().isBlank()) {
+            opponentName = room.getOpponent().getName();
+        }
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().disableShotSelectionMode();
+            clientController.getGameView().refreshView();
+            clientController.getGameView().showMatchEndPopup("You lost: " + opponentName + " won the match.");
+        }
+    }
+
+    private void handlePeerExitMessage(MessageConstants.PPExit peerExit) {
+        clientController.log("[RECV] PP_EXIT from peer room=" + peerExit.roomId());
+        clientController.markRoomClosedByOpponent();
+        peerConnectionService.disconnectFromPeer();
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().disableShotSelectionMode();
+            clientController.getGameView().refreshView();
+            clientController.getGameView().showMatchEndPopup(
+                    "The opponent left the match. Back to menu to start a new match.");
+        }
+    }
+
+    private void handleRoomTimeoutMessage(MessageConstants.CSRoomTimeout message) {
+        clientController.log("[RECV] CS_ROOM_TIMEOUT from server for room=" + message.roomId());
+
+        // Rispondi con ACK al server
+        try {
+            serverConnectionService.sendMessageToServer(new MessageConstants.CSRoomTimeoutAck(
+                    clientController.getClient().getNodeId(),
+                    message.roomId(),
+                    clientController.getClient().getName()));
+            clientController.log("[SEND] CS_ROOM_TIMEOUT_ACK to server for room=" + message.roomId());
+        } catch (IOException ex) {
+            clientController.log("Failed to send CS_ROOM_TIMEOUT_ACK: " + ex.getMessage());
+        }
+
+        // Chiudi connessione con peer
+        peerConnectionService.disconnectFromPeer();
+        clientController.markRoomClosedByOpponent();
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().disableShotSelectionMode();
+            clientController.getGameView().refreshView();
+            clientController.getGameView().showMatchEndPopup(
+                    "Connection problem with the opponent. Back to menu to start a new match.");
+        }
+    }
+
+    private void handleRoomInterruptedMessage(MessageConstants.CSRoomInterrupted message) {
+        clientController.log("[RECV] CS_ROOM_INTERRUPTED from peer for room=" + message.roomId());
+        clientController.markRoomClosedByOpponent();
+        peerConnectionService.disconnectFromPeer();
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().disableShotSelectionMode();
+            clientController.getGameView().refreshView();
+            clientController.getGameView().showMatchEndPopup(
+                    "The opponent left the match. Back to menu to start a new match.");
+        }
+    }
+
+    private void handleBackupJoined(MessageConstants.CSBackupJoined message) {
+        BackupServer backup = new BackupServer(message.senderNodeId(), message.backupIp(), message.backupPort());
+        clientController.addBackupServer(backup);
+    }
+
+    private void handleBackupExit(MessageConstants.CSBackupExit message) {
+        clientController.removeBackupServer(message.senderNodeId());
+    }
+
+    private void waitForPeerMessageWithTimeout(
+            int timeoutSeconds,
+            String threadName,
+            String expectedMessageName,
+            Consumer<MessageConstants.MessageTuple> onMessage) {
+        peerConnectionService.waitForMessageWithTimeout(
+                timeoutSeconds,
+                threadName,
+                onMessage,
+                (timeout, threadNameCallback) -> handlePeerMessageTimeout(timeout, expectedMessageName),
+                throwable -> handlePeerMessageFailure(throwable, expectedMessageName));
+    }
+
+    private void handlePeerMessageFailure(
+            Throwable failure,
+            String expectedMessageName) {
+        String reason = failure != null && failure.getMessage() != null
+                ? failure.getMessage()
+                : "unknown peer communication error";
+        clientController.log("Peer communication error while waiting for " + expectedMessageName + ": " + reason);
+        handlePeerCommunicationLost("Connection with the opponent was lost", reason);
+    }
+
+    private void handlePeerMessageTimeout(int timeoutSeconds, String expectedMessageName)
+    {
+        clientController.log("Peer timeout after " + timeoutSeconds + " seconds while waiting for " + expectedMessageName + ".");
+
+        handlePeerCommunicationLost(
+                "Connection with the opponent was lost (timeout)",
+                "timeout while waiting for " + expectedMessageName);
+    }
+
+    private void handlePeerCommunicationLost(
+            String popupPrefix,
+            String reason) {
+
+        PlayingRoom room = clientController.getCurrentRoom();
+        if (room == null || room.getRoomId() == null || room.getRoomId().isBlank()) {
+            return;
+        }
+
+        String playerName = clientController.getClient().getName();
+
+        try {
+            if (serverConnectionService.isConnectedToServer()) {
+                serverConnectionService.sendMessageToServer(new MessageConstants.CSRoomTimeout(
+                        clientController.getClient().getNodeId(),
+                        room.getRoomId(),
+                        playerName));
+                clientController.log("Sent CS_ROOM_TIMEOUT to server for room=" + room.getRoomId() + " reason=" + reason);
+            } else {
+                clientController.log("Cannot notify server about timeout: server connection is not active.");
+            }
+        } catch (IOException ex) {
+            clientController.log("Failed to notify server about peer timeout: " + ex.getMessage());
+        }
+
+        peerConnectionService.disconnectFromPeer();
+        clientController.markRoomClosedByOpponent();
+
+        if (clientController.getGameView() != null) {
+            clientController.getGameView().disableShotSelectionMode();
+            clientController.getGameView().refreshView();
+            clientController.getGameView().showMatchEndPopup(
+                    popupPrefix + ". Possible network/congestion issues. Back to menu to start a new match.");
+        }
+    }
 }
 
