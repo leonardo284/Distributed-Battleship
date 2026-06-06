@@ -1,9 +1,9 @@
 package distributed.battleship.common.model.client;
 
-import org.example.common.model.room.Room;
-import org.example.common.model.room.grid.Cell;
-import org.example.common.model.room.grid.Grid;
-import org.example.common.model.room.grid.Position;
+import distributed.battleship.common.model.room.Room;
+import distributed.battleship.common.model.room.grid.Cell;
+import distributed.battleship.common.model.room.grid.Grid;
+import distributed.battleship.common.model.room.grid.Position;
 
 import java.util.UUID;
 

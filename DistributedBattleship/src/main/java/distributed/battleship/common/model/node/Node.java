@@ -1,5 +1,7 @@
 package distributed.battleship.common.model.node;
 
+import java.util.UUID;
+
 /**
  * Represents a generic node in the network.
  * Contains the basic node information: immutable node ID, IP address and port.
