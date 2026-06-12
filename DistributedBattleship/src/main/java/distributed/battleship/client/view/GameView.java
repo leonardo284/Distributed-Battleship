@@ -170,7 +170,7 @@ public class GameView extends JFrame implements IViewLoggable {
 
     /** Initializes the UI with a glass pane for overlay loading indicator. */
     private void initUI() {
-        setTitle("Battleship – Game");
+        setTitle("Battleship \u2013 Game");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         setSize(1350, debugMode ? 820 : 720);
         setLocationByPlatform(true);

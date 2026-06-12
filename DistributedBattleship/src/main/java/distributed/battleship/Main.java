@@ -1,6 +1,7 @@
 package distributed.battleship;
 
 import distributed.battleship.client.MainClient;
+import distributed.battleship.common.helper.AppIconHelper;
 import distributed.battleship.common.helper.AppLogger;
 import distributed.battleship.server.MainServer;
 
@@ -23,6 +24,7 @@ public class Main {
         String mode = args[0].toLowerCase();
         boolean debugMode = args.length >= 2 && "debug".equalsIgnoreCase(args[1]);
         AppLogger.setDebugEnabled(debugMode);
+        AppIconHelper.install();
 
         try {
             switch (mode) {

@@ -2,6 +2,7 @@ package distributed.battleship.client;
 
 import distributed.battleship.client.controller.ClientController;
 import distributed.battleship.common.config.Config;
+import distributed.battleship.common.helper.AppIconHelper;
 import distributed.battleship.common.model.client.Client;
 
 /**
@@ -29,6 +30,7 @@ public class MainClient {
         }
 
         boolean debugMode = args.length == 1 && "debug".equalsIgnoreCase(args[0]);
+        AppIconHelper.install();
 
         Client client = new Client(Config.SERVER_IP, null);
         ClientController controller = new ClientController(client, Config.SERVER_IP, Config.PRIMARY_SERVER_PORT, debugMode);

@@ -21,7 +21,7 @@ public final class Config {
     public static final int BACKUP_PRIMARY_TIMEOUT_SECONDS = STATE_BROADCAST_INTERVAL_SECONDS;
 
     /** Maximum number of reconnection attempts the client makes when the primary server goes down. */
-    public static final int CLIENT_RECONNECT_MAX_ATTEMPTS = 5;
+    public static final int CLIENT_RECONNECT_MAX_ATTEMPTS = 2;
 
     /** Seconds to wait between each client reconnection attempt. */
     public static final int CLIENT_RECONNECT_DELAY_SECONDS = 3;

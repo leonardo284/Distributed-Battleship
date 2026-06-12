@@ -70,7 +70,7 @@ public class MenuView extends JFrame implements IViewLoggable {
 
     /** Builds and lays out all UI components. */
     private void initUI() {
-        setTitle("Battleship – Main Menu");
+        setTitle("Battleship \u2013 Main Menu");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         setSize(700, debugMode ? 460 : 320);
         setLocationByPlatform(true);

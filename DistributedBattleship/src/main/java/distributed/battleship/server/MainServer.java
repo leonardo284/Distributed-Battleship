@@ -1,6 +1,7 @@
 package distributed.battleship.server;
 
 import distributed.battleship.common.config.Config;
+import distributed.battleship.common.helper.AppIconHelper;
 import distributed.battleship.server.backup.controller.BackupServerController;
 import distributed.battleship.server.primary.controller.PrimaryServerController;
 import distributed.battleship.common.model.server.BackupServer;
@@ -29,6 +30,7 @@ public class MainServer {
         }
 
         String mode = args[0].toUpperCase();
+        AppIconHelper.install();
 
         if ("PRIMARY".equals(mode)) {
             PrimaryServer primaryServer = new PrimaryServer(Config.SERVER_IP, Config.PRIMARY_SERVER_PORT, Config.BACKUP_SERVER_PORT);
