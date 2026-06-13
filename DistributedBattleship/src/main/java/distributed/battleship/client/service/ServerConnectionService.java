@@ -7,6 +7,10 @@ import distributed.battleship.common.service.TcpNodeConnectionService;
 import distributed.battleship.common.model.server.PrimaryServer;
 
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 /**
  * TCP service dedicated to client-server communication.
@@ -38,7 +42,39 @@ public class ServerConnectionService extends TcpNodeConnectionService {
         connectToNode(server, 0, server.getClientPort());
         if (socket != null) {
             client.setServerConnectionPort(socket.getLocalPort());
+            // Use the local address of the established socket as the client's reachable IP.
+            // If the socket resolved to a loopback address (e.g. the client connected to
+            // 127.0.0.1), fall back to the first non-loopback IPv4 address on this machine
+            // so the peer on another network node can reach us.
+            InetAddress localAddr = socket.getLocalAddress();
+            if (localAddr.isLoopbackAddress()) {
+                localAddr = resolveNonLoopbackIpv4();
+            }
+            client.setIp(localAddr != null ? localAddr.getHostAddress() : socket.getLocalAddress().getHostAddress());
         }
+    }
+
+    /**
+     * Returns the first non-loopback, non-virtual, up IPv4 address found on this machine,
+     * or {@code null} if none is available.
+     */
+    private static InetAddress resolveNonLoopbackIpv4() {
+        try {
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            while (ifaces != null && ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) continue;
+                Enumeration<InetAddress> addrs = iface.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress addr = addrs.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        return addr;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /**

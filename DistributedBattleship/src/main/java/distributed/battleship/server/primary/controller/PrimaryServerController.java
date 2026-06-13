@@ -13,9 +13,13 @@ import distributed.battleship.server.view.ServerView;
 import distributed.battleship.server.view.SimpleServerView;
 
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -107,7 +111,8 @@ public class PrimaryServerController {
         Thread clientAcceptThread = new Thread(() -> {
             try {
                 clientServerSocket = new ServerSocket(server.getClientPort());
-                log("PRIMARY", "Listening on port " + server.getClientPort());
+                log("PRIMARY", "Listening for clients on port " + server.getClientPort());
+                logReachableAddresses("PRIMARY", server.getClientPort());
 
                 while (!clientServerSocket.isClosed()) {
                     Socket clientSocket = clientServerSocket.accept();
@@ -134,6 +139,7 @@ public class PrimaryServerController {
             try {
                 backupServerSocket = new ServerSocket(server.getBackupPort());
                 log("BACKUP", "Listening for backup servers on port " + server.getBackupPort());
+                logReachableAddresses("BACKUP", server.getBackupPort());
 
                 while (!backupServerSocket.isClosed()) {
                     Socket backupSocket = backupServerSocket.accept();
@@ -410,6 +416,37 @@ public class PrimaryServerController {
 
     public void log(String tag, String message) {
         serverView.addLog(tag, message);
+    }
+
+    /**
+     * Logs all non-loopback IPv4 addresses on which the server can be reached
+     * from other nodes on the same network.
+     */
+    private void logReachableAddresses(String tag, int port) {
+        try {
+            StringBuilder sb = new StringBuilder("Reachable from other nodes at:");
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            boolean found = false;
+            while (ifaces != null && ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) continue;
+                Enumeration<InetAddress> addrs = iface.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress addr = addrs.nextElement();
+                    if (addr instanceof Inet4Address) {
+                        sb.append(" ").append(addr.getHostAddress()).append(":").append(port);
+                        found = true;
+                    }
+                }
+            }
+            if (found) {
+                log(tag, sb.toString());
+            } else {
+                log(tag, "No non-loopback IPv4 interfaces found — server may only be reachable locally");
+            }
+        } catch (Exception e) {
+            log(tag, "Could not enumerate network interfaces: " + e.getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------
