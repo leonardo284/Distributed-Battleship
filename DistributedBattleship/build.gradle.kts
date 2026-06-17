@@ -26,7 +26,7 @@ tasks.register<Jar>("fatJar") {
         attributes["Main-Class"] = "distributed.battleship.Main"
     }
 
-    archiveBaseName.set("DistributedBattleship-all")
+    archiveBaseName.set("DistributedBattleship")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     // Questa è la sintassi specifica Kotlin DSL per scompattare e unire le dipendenze
