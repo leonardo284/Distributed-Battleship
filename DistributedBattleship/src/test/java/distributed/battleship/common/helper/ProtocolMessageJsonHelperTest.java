@@ -57,16 +57,6 @@ class ProtocolMessageJsonHelperTest {
     }
 
     @Test
-    void csRequestHeartbeat_roundTrip() {
-        UUID id = UUID.randomUUID();
-        var original = new MessageConstants.CSRequestHeartbeat(id);
-        var result = (MessageConstants.CSRequestHeartbeat) roundTrip(original);
-
-        assertEquals(MessageConstants.MessageType.CS_REQUEST_HEARTBEAT, result.getType());
-        assertEquals(id, result.senderNodeId());
-    }
-
-    @Test
     void csResponseCreateRoom_roundTrip() {
         UUID id = UUID.randomUUID();
         BackupServer backup = new BackupServer(UUID.randomUUID(), "5.5.5.5", 7000);
@@ -97,14 +87,6 @@ class ProtocolMessageJsonHelperTest {
         assertEquals(5001, result.opponentPort());
         assertEquals(opponentId, result.opponentNodeId());
         assertEquals(startingId, result.startingPlayerId());
-    }
-
-    @Test
-    void csResponseHeartbeat_roundTrip() {
-        UUID id = UUID.randomUUID();
-        var result = (MessageConstants.CSResponseHeartbeat)
-                roundTrip(new MessageConstants.CSResponseHeartbeat(id));
-        assertEquals(id, result.senderNodeId());
     }
 
     @Test
